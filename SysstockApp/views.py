@@ -6,20 +6,20 @@ from .serializer import *
 from .models import *
 
 
-class SucursalView(viewsets.ModelViewSet):
-    serializer_class = SucursalSerializer
-    queryset = Sucursal.objects.all()
+class BranchView(viewsets.ModelViewSet):
+    serializer_class = BranchSerializer
+    queryset = Branch.objects.all()
 
-class UsuariosView(viewsets.ModelViewSet):
-    serializer_class = UsuarioSerializer
-    queryset = Usuario.objects.all()
+class UserView(viewsets.ModelViewSet):
+    serializer_class = UserSerializer
+    queryset = User.objects.all()
 
-class  ProductoView(viewsets.ModelViewSet):
-    serializer_class = ProductoSerializer
-    queryset = Producto.objects.all()
+class  ProductView(viewsets.ModelViewSet):
+    serializer_class = ProductSerializer
+    queryset = Product.objects.all()
 
 
-class ProveedorView(viewsets.ModelViewSet):
-    serializer_class = ProveedorSerializer
-    queryset = Proveedor.objects.all()
+class ProviderView(viewsets.ModelViewSet):
+    serializer_class = ProviderSerializer
+    queryset = Provider.objects.all()
 

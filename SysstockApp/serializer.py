@@ -1,20 +1,20 @@
 from rest_framework import serializers
 from .models import *
 
-class SucursalSerializer(serializers.ModelSerializer):
+class BranchSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Sucursal
+        model = Branch
         fields = '__all__'	
-class UsuarioSerializer(serializers.ModelSerializer):
+class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Usuario
+        model = User
         fields = '__all__'
 
-class ProveedorSerializer(serializers.ModelSerializer):
+class ProviderSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Proveedor
+        model = Provider
         fields = '__all__'
-class ProductoSerializer(serializers.ModelSerializer):
+class ProductSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Producto
+        model = Product
         fields = '__all__'
