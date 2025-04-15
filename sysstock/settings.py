@@ -37,10 +37,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'SysstockApp',
-    'rest_framework',
-    'corsheaders',
     'drf_spectacular',
+    'rest_framework',
+    'SysstockApp',
+    'corsheaders',
+    
     
 ]
 
