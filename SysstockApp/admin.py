@@ -1,7 +1,7 @@
 from django.contrib import admin
-from .models import Sucursal, Usuario, Proveedor, Producto
+from .models import Branch, Provider, Product, User
 
-admin.site.register(Sucursal)
+admin.site.register(Branch)
 
 
 # Register your models here.
