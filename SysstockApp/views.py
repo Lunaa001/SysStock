@@ -10,9 +10,6 @@ class BranchView(viewsets.ModelViewSet):
     serializer_class = BranchSerializer
     queryset = Branch.objects.all()
 
-class UserView(viewsets.ModelViewSet):
-    serializer_class = UserSerializer
-    queryset = User.objects.all()
 
 class  ProductView(viewsets.ModelViewSet):
     serializer_class = ProductSerializer

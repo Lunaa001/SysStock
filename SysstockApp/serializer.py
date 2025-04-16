@@ -4,7 +4,7 @@ from .models import *
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
-        fields = '__all__'	
+        fields = '__all__'
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -18,3 +18,4 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = '__all__'
+
