@@ -1,17 +1,18 @@
 from django.db import models
-from SysstockApp.models import Branch
+from django.contrib.auth.models import AbstractUser
 
-class User(models.Model):
+class User(AbstractUser):
 
     ROLES = [
         ('admin', 'Administrador'),
         ('limMerchant', 'Limitado'),
     ]
-    rol = models.CharField(max_length=20, choices=ROLES)
-    sucursal = models.ForeignKey(Branch, on_delete=models.CASCADE)
+    rol = models.CharField(max_length=20, choices=ROLES, default='limMerchant')
+    sucursal = models.CharField( max_length=100, default= '')  # Usa una cadena para evitar la importación directa
     email= models.EmailField(unique=True)
+    password = models.CharField(max_length=100, default='default_password')
 
 
     def __str__(self):
-        return self.name
+        return self.email
 # Create your models here.

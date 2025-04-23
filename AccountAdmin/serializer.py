@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import *
+from AccountAdmin.models import User  # Importa User desde AccountAdmin
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

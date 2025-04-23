@@ -139,8 +139,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = []
 
-
+AUTH_USER_MODEL = 'AccountAdmin.User'  # Cambia esto al nombre de tu modelo de usuario personalizado
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    
 }

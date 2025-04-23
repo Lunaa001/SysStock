@@ -11,6 +11,5 @@ router.register(r'User', views.UserView, basename='Usuario')
 
 # Define las rutas
 urlpatterns = [
-    path('SisstockApp/', include(router.urls)),  # Prefijo para las rutas de la API
-    
+    path('SisstockApp/', include(router.urls)),  # Prefijo para las rutas de la API  
 ]

@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import authenticate, login, logout
 from rest_framework.permissions import IsAuthenticated
-
+from AccountAdmin.serializer import UserSerializer
 
 from rest_framework import viewsets
 from .serializer import *
@@ -19,13 +19,16 @@ class LoginView(APIView):
     def post(self, request):
         username = request.data.get("username")
         password = request.data.get("password")
+        print(username, password)
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
             return Response({
                 "message": "Login exitoso",
                 "username": user.username,
-                "role": user.role
+                "role": user.role,
+                "email": user.email,
+                "password": user.password,
             }, status=status.HTTP_200_OK)
         return Response({"error": "Credenciales inválidas"}, status=status.HTTP_400_BAD_REQUEST)
 

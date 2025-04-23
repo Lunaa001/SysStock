@@ -1,10 +1,13 @@
 from rest_framework import serializers
-from .models import *
+from AccountAdmin.models import User
+from .models import Branch, Product, Provider  # Importa solo los modelos necesarios
+
 
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
         fields = '__all__'
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
