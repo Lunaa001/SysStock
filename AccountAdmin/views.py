@@ -29,6 +29,7 @@ class LoginView(APIView):
                 "role": user.role,
                 "email": user.email,
                 "password": user.password,
+                
             }, status=status.HTTP_200_OK)
         return Response({"error": "Credenciales inválidas"}, status=status.HTTP_400_BAD_REQUEST)
 

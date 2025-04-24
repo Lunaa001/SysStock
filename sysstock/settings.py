@@ -143,5 +143,8 @@ AUTH_USER_MODEL = 'AccountAdmin.User'  # Cambia esto al nombre de tu modelo de u
 
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
     
 }
