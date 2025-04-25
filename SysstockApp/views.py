@@ -9,6 +9,8 @@ from rest_framework import viewsets
 from .models import Branch, Product, Provider  # Importa solo los modelos necesarios
 from AccountAdmin.models import User  # Importa User desde AccountAdmin
 from .serializer import BranchSerializer, ProductSerializer, ProviderSerializer, UserSerializer
+from AccountAdmin.permissions import IsAdminUser
+
 
 
 class BranchView(viewsets.ModelViewSet):
@@ -18,6 +20,7 @@ class BranchView(viewsets.ModelViewSet):
 class UserView(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     queryset = User.objects.all()
+    
 
 class  ProductView(viewsets.ModelViewSet):
     serializer_class = ProductSerializer

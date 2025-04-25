@@ -15,6 +15,7 @@ class Provider(models.Model):
     direccion = models.TextField()
 
 
+
 # Modelo de Producto
 
 class Product(models.Model):
@@ -23,6 +24,7 @@ class Product(models.Model):
     cantidad = models.IntegerField()
     proveedor = models.ForeignKey(Provider, on_delete=models.CASCADE)
     sucursal = models.ForeignKey(Branch, on_delete=models.CASCADE)
+    
 
 
 # Create your models here.

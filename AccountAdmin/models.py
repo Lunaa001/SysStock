@@ -9,8 +9,7 @@ class User(AbstractUser):
     ]
     rol = models.CharField(max_length=20, choices=ROLES, default='limMerchant')
     sucursal = models.CharField( max_length=100, default= '')  # Usa una cadena para evitar la importación directa
-    email= models.EmailField(unique=True)
-
+    
     def __str__(self):
         return self.email
 # Create your models here.

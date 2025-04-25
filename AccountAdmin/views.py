@@ -10,13 +10,19 @@ from rest_framework import viewsets
 from .serializer import *
 from .models import *
 
+from AccountAdmin.permissions import IsAdminUser
+
+
 
 class UserView(viewsets.ModelViewSet):
     serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]  # Solo los administradores pueden acceder
+
     queryset = User.objects.all()  
 
 class LoginView(APIView):
     def post(self, request):
+        
         username = request.data.get("username")
         password = request.data.get("password")
         print(username, password)
@@ -26,7 +32,7 @@ class LoginView(APIView):
             return Response({
                 "message": "Login exitoso",
                 "username": user.username,
-                "role": user.role,
+                "rol": user.rol,
                 "email": user.email,
                 "password": user.password,
                 
@@ -39,3 +45,8 @@ class LogoutView(APIView):
     def post(self, request):
         logout(request)
         return Response({"message": "Logout exitoso"}, status=status.HTTP_200_OK)
+
+##class UserView(viewsets.ModelViewSet):
+##    serializer_class = UserSerializer
+##  queryset = User.objects.all()
+##    permission_classes = [IsAuthenticated, IsAdminUser]  # Solo los administradores pueden acceder

@@ -3,6 +3,7 @@ from AccountAdmin.models import User
 from .models import Branch, Product, Provider  # Importa solo los modelos necesarios
 
 
+
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
