@@ -16,6 +16,7 @@ class Provider(models.Model):
 
 
 
+
 # Modelo de Producto
 
 class Product(models.Model):
@@ -25,6 +26,5 @@ class Product(models.Model):
     proveedor = models.ForeignKey(Provider, on_delete=models.CASCADE)
     sucursal = models.ForeignKey(Branch, on_delete=models.CASCADE)
     
-
 
 # Create your models here.

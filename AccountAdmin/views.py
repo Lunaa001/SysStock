@@ -6,19 +6,25 @@ from django.contrib.auth import authenticate, login, logout
 from rest_framework.permissions import IsAuthenticated
 from AccountAdmin.serializer import UserSerializer
 
+
 from rest_framework import viewsets
 from .serializer import *
 from .models import *
 
-from AccountAdmin.permissions import IsAdminUser
-
+from AccountAdmin.permissions import IsAdminUser, CanListUsers
 
 
 class UserView(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]  # Solo los administradores pueden acceder
-
     queryset = User.objects.all()  
+
+    def get_permissions(self):
+        if self.action == 'list':  # Restringir la acción de listar usuarios
+            self.permission_classes = [CanListUsers]
+        elif self.action in ['create', 'update', 'partial_update', 'destroy']:  # Crear, editar o borrar usuarios
+            self.permission_classes = [IsAdminUser]  # Solo administradores pueden realizar estas acciones
+        return super().get_permissions()
 
 class LoginView(APIView):
     def post(self, request):
@@ -46,7 +52,3 @@ class LogoutView(APIView):
         logout(request)
         return Response({"message": "Logout exitoso"}, status=status.HTTP_200_OK)
 
-##class UserView(viewsets.ModelViewSet):
-##    serializer_class = UserSerializer
-##  queryset = User.objects.all()
-##    permission_classes = [IsAuthenticated, IsAdminUser]  # Solo los administradores pueden acceder
