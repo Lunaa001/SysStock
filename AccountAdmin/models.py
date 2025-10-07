@@ -7,8 +7,8 @@ class User(AbstractUser):
         ('limMerchant', 'Limitado'),
     ]
     rol = models.CharField(max_length=20, choices=ROLES, default='limMerchant')
-    sucursal = models.CharField(max_length=100, default='', blank=True)  # Cambiado a CharField para almacenar el nombre de la sucursal
+    # nombre de sucursal en texto (simple). Si querés FK a Branch, avisá y lo cambio.
+    sucursal = models.CharField(max_length=100, default='', blank=True, null=True)
 
     def __str__(self):
-        return self.email
-# Create your models here.
+        return self.username or self.email or f"User {self.pk}"

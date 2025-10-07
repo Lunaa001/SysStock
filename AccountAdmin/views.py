@@ -1,54 +1,52 @@
-from django.shortcuts import render
+# AccountAdmin/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
-from django.contrib.auth import authenticate, login, logout
-from rest_framework.permissions import IsAuthenticated
-from AccountAdmin.serializer import UserSerializer
+from rest_framework import status, generics
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken
+
+# OJO: si tu archivo es serializers.py (plural), cambiá a .serializers
+from .serializer import PublicRegisterSerializer, AdminCreateUserSerializer
+from .permissions import IsAdmin
+
+User = get_user_model()
 
 
-from rest_framework import viewsets
-from .serializer import *
-from .models import *
+# Registro público: SOLO email + password (username=email, rol=limMerchant)
+class RegisterView(generics.CreateAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PublicRegisterSerializer
 
-from AccountAdmin.permissions import IsAdminUser, CanListUsers
+    # Devuelve tokens y datos básicos del usuario recién creado
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()  # crea username=email, rol=limMerchant
+
+        refresh = RefreshToken.for_user(user)
+        data = {
+            "username": user.username,
+            "email": user.email,
+            "rol": getattr(user, "rol", None),
+            "sucursal": getattr(user, "sucursal", ""),
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }
+        headers = self.get_success_headers(serializer.data)
+        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class UserView(viewsets.ModelViewSet):
-    serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]  # Solo los administradores pueden acceder
-    queryset = User.objects.all()  
-
-    def get_permissions(self):
-        if self.action == 'list':  # Restringir la acción de listar usuarios
-            self.permission_classes = [CanListUsers]
-        elif self.action in ['create', 'update', 'partial_update', 'destroy']:  # Crear, editar o borrar usuarios
-            self.permission_classes = [IsAdminUser]  # Solo administradores pueden realizar estas acciones
-        return super().get_permissions()
-
-class LoginView(APIView):
-    def post(self, request):
-        
-        username = request.data.get("username")
-        password = request.data.get("password")
-        print(username, password)
-        user = authenticate(request, username=username, password=password)
-        if user is not None:
-            login(request, user)
-            return Response({
-                "message": "Login exitoso",
-                "username": user.username,
-                "rol": user.rol,
-                "email": user.email,
-                "password": user.password,
-                
-            }, status=status.HTTP_200_OK)
-        return Response({"error": "Credenciales inválidas"}, status=status.HTTP_400_BAD_REQUEST)
-
+# Logout (en JWT es client-side: el cliente descarta el token)
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        logout(request)
-        return Response({"message": "Logout exitoso"}, status=status.HTTP_200_OK)
+        # Si en el futuro usás blacklist, acá podrías “blacklistear” el refresh.
+        return Response({"message": "Logout ok (borra el token en el cliente)"}, status=status.HTTP_200_OK)
 
+
+# Crear usuario (solo admin): username + email + password (+ rol + sucursal opcional)
+class AdminUserCreateView(generics.CreateAPIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+    serializer_class = AdminCreateUserSerializer

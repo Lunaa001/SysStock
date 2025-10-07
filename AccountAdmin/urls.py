@@ -1,13 +1,20 @@
-from django.urls import path, include
-from rest_framework import routers
-from AccountAdmin.views import UserView  # Importa la vista UserView correctamente
-
-router = routers.DefaultRouter()
-router.register(r'User', UserView, basename='Usuario')
+# AccountAdmin/urls.py
+from django.urls import path
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from .views import RegisterView, LogoutView, AdminUserCreateView
 
 urlpatterns = [
-    path('AccountAdmin/', include(router.urls)),
-    # path('login/', views.LoginView.as_view(), name='login'),  # Ruta para LoginView
-    # path('logout/', views.LogoutView.as_view(), name='logout'),  # Ruta para LogoutView
-]
+    # Auth pública
+    path("auth/register/", RegisterView.as_view(), name="register"),
 
+    # JWT: login / refresh / verify
+    path("auth/login/",   TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("auth/refresh/", TokenRefreshView.as_view(),    name="token_refresh"),
+    path("auth/verify/",  TokenVerifyView.as_view(),     name="token_verify"),
+
+    # Logout (client-side)
+    path("auth/logout/",  LogoutView.as_view(), name="logout"),
+
+    # Solo admin
+    path("admin/users/create/", AdminUserCreateView.as_view(), name="admin_user_create"),
+]

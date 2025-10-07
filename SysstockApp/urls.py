@@ -1,18 +1,14 @@
-from django.urls import path, include
-from rest_framework import routers
-from . import views 
+from rest_framework.routers import DefaultRouter
+from .views import (
+    CategoryViewSet, BranchViewSet, ProductViewSet,
+    StockMovementViewSet, SaleViewSet
+)
 
-# Importa las vistas de tu aplicación
+router = DefaultRouter()
+router.register(r"categorias", CategoryViewSet, basename="categorias")
+router.register(r"sucursales", BranchViewSet, basename="sucursales")
+router.register(r"productos", ProductViewSet, basename="productos")
+router.register(r"movimientos", StockMovementViewSet, basename="movimientos")
+router.register(r"ventas", SaleViewSet, basename="ventas")
 
-
-# Define el router y registra las vistas
-router = routers.DefaultRouter()
-router.register(r'Branch', views.BranchView, basename='Sucursal')
-router.register(r'Product', views.ProductView, basename='Producto')
-router.register(r'Provider', views.ProviderView, basename='Provedor')
-
-
-# Define las rutas
-urlpatterns = [
-    path('SisstockApp/', include(router.urls)),  # Prefijo para las rutas de la API  
-]
+urlpatterns = router.urls

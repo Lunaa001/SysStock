@@ -17,17 +17,12 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from AccountAdmin import views  # Importa las vistas de tu aplicación
-
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/', include('SysstockApp.urls')),  # Incluye las rutas de SysstockApp
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/', include('AccountAdmin.urls')),  # Incluye las rutas de AccountAdmin
-    path('login/', views.LoginView.as_view(), name='login'),  # Ruta para LoginView
-    path('logout/', views.LogoutView.as_view(), name='logout'),  # Ruta para LogoutView
+    path("admin/", admin.site.urls),
+    path("api/", include("SysstockApp.urls")),
+    path("api/", include("AccountAdmin.urls")),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 ]
-
 
