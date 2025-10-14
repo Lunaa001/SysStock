@@ -22,7 +22,10 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("SysstockApp.urls")),
     path("api/", include("AccountAdmin.urls")),
+
+    # Login/Logout de la Browsable API (sesión con cookies)
+    path("api/auth/session/", include("rest_framework.urls")),
+
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 ]
-

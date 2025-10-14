@@ -6,7 +6,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-cambiar")
 DEBUG = True
 
-ALLOWED_HOSTS = ["*"]  # ajustá para prod
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+ 
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -92,15 +98,14 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-        # opcional para /admin/: "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.SessionAuthentication",  # cookies + CSRF
+        "rest_framework.authentication.BasicAuthentication",    # útil en Postman
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "rest_framework.permissions.AllowAny",  # pública por defecto; protege por vista
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
-
 
 
 SPECTACULAR_SETTINGS = {
@@ -109,5 +114,10 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
 }
 
+# después de iniciar sesión, ir a la raíz de tu API
+LOGIN_REDIRECT_URL = "/api/"
+
+# después de cerrar sesión, volver al login HTML de DRF o a /api/
+LOGOUT_REDIRECT_URL = "/api/auth/session/login/"
 
 

@@ -3,50 +3,61 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.contrib.auth import get_user_model
-from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.middleware.csrf import get_token
 
-# OJO: si tu archivo es serializers.py (plural), cambiá a .serializers
+# OJO: si tu archivo es serializers.py (plural), cambia a .serializers
 from .serializer import PublicRegisterSerializer, AdminCreateUserSerializer
 from .permissions import IsAdmin
 
 User = get_user_model()
 
 
-# Registro público: SOLO email + password (username=email, rol=limMerchant)
+# --- Registro público: SOLO email + password (username=email, rol=limMerchant)
 class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     serializer_class = PublicRegisterSerializer
+    # devuelve 201 con los datos del serializer; NO devuelve tokens
 
-    # Devuelve tokens y datos básicos del usuario recién creado
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()  # crea username=email, rol=limMerchant
 
-        refresh = RefreshToken.for_user(user)
-        data = {
+# --- Login con cookies de sesión (requiere CSRF)
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+        user = authenticate(request, username=username, password=password)
+        if not user:
+            return Response({"detail": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
+        login(request, user)  # setea cookie de sesión
+        return Response({
+            "message": "Login ok",
             "username": user.username,
-            "email": user.email,
             "rol": getattr(user, "rol", None),
             "sucursal": getattr(user, "sucursal", ""),
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-        }
-        headers = self.get_success_headers(serializer.data)
-        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
+        }, status=status.HTTP_200_OK)
 
 
-# Logout (en JWT es client-side: el cliente descarta el token)
+# --- Logout con cookies (requiere CSRF y estar autenticado)
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # Si en el futuro usás blacklist, acá podrías “blacklistear” el refresh.
-        return Response({"message": "Logout ok (borra el token en el cliente)"}, status=status.HTTP_200_OK)
+        logout(request)
+        return Response({"message": "Logout ok"}, status=status.HTTP_200_OK)
 
 
-# Crear usuario (solo admin): username + email + password (+ rol + sucursal opcional)
+# --- Crear usuario (solo admin)
 class AdminUserCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]
     serializer_class = AdminCreateUserSerializer
+
+
+# --- CSRF helper: setea cookie csrftoken y devuelve el token
+class CSRFTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        token = get_token(request)
+        return Response({"csrfToken": token}, status=status.HTTP_200_OK)
