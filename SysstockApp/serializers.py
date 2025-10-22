@@ -14,7 +14,7 @@ class BranchSerializer(serializers.ModelSerializer):
 
 class ProductListSerializer(serializers.ModelSerializer):
     categoria = serializers.CharField(source="categoria.nombre", read_only=True)
-    cantidad = serializers.IntegerField(read_only=True)
+    cantidad = serializers.IntegerField(read_only=True)  # propiedad @property del modelo
     class Meta:
         model = Product
         fields = ["id", "nombre", "categoria", "precio", "cantidad"]

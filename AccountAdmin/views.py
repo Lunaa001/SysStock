@@ -1,54 +1,55 @@
-from django.shortcuts import render
-from rest_framework.views import APIView
+# AccountAdmin/views.py
+from rest_framework.generics import GenericAPIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from django.contrib.auth import authenticate, login, logout
-from rest_framework.permissions import IsAuthenticated
-from AccountAdmin.serializer import UserSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
+from .serializers import RegisterSerializer, AdminCreateUserSerializer
 
-from rest_framework import viewsets
-from .serializer import *
-from .models import *
+class RegisterView(GenericAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = RegisterSerializer
 
-from AccountAdmin.permissions import IsAdminUser, CanListUsers
+    def post(self, request, *args, **kwargs):
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        user = ser.save()  # crea usuario con sucursal asignada + admin por defecto
 
-
-class UserView(viewsets.ModelViewSet):
-    serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]  # Solo los administradores pueden acceder
-    queryset = User.objects.all()  
-
-    def get_permissions(self):
-        if self.action == 'list':  # Restringir la acción de listar usuarios
-            self.permission_classes = [CanListUsers]
-        elif self.action in ['create', 'update', 'partial_update', 'destroy']:  # Crear, editar o borrar usuarios
-            self.permission_classes = [IsAdminUser]  # Solo administradores pueden realizar estas acciones
-        return super().get_permissions()
-
-class LoginView(APIView):
-    def post(self, request):
-        
-        username = request.data.get("username")
-        password = request.data.get("password")
-        print(username, password)
-        user = authenticate(request, username=username, password=password)
-        if user is not None:
-            login(request, user)
-            return Response({
-                "message": "Login exitoso",
+        # devuelve tokens para que el cliente pueda loguearse directo si quiere
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "id": user.id,
                 "username": user.username,
-                "rol": user.rol,
                 "email": user.email,
-                "password": user.password,
-                
-            }, status=status.HTTP_200_OK)
-        return Response({"error": "Credenciales inválidas"}, status=status.HTTP_400_BAD_REQUEST)
+                "rol": user.rol,
+                "sucursal_id": user.sucursal_id,
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
-class LogoutView(APIView):
+class AdminUserCreateView(GenericAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = AdminCreateUserSerializer
 
-    def post(self, request):
-        logout(request)
-        return Response({"message": "Logout exitoso"}, status=status.HTTP_200_OK)
+    def post(self, request, *args, **kwargs):
+        # Solo admins pueden crear usuarios
+        if getattr(request.user, "rol", None) != "admin":
+            return Response({"detail": "Solo admins"}, status=status.HTTP_403_FORBIDDEN)
 
+        ser = self.get_serializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        u = ser.save()
+        return Response(
+            {
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "rol": u.rol,
+                "sucursal_id": u.sucursal_id,
+            },
+            status=status.HTTP_201_CREATED,
+        )
