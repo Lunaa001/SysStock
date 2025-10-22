@@ -1,45 +1,58 @@
-# AccountAdmin/serializers.py
+import logging
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from SysstockApp.models import Branch
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
-
 class SucursalInlineSerializer(serializers.Serializer):
     nombre = serializers.CharField(required=True)
     direccion = serializers.CharField(required=False, allow_blank=True)
 
 class RegisterSerializer(serializers.ModelSerializer):
+    """
+    Serializer para que un ADMIN cree empleados (o más admins) dentro de su empresa.
+    Si no envían sucursal explícita, se asigna la del admin por defecto.
+    """
     password = serializers.CharField(write_only=True, required=True)
-    password2 = serializers.CharField(write_only=True, required=True)
-    # sucursal anidada: se crea en paralelo
     sucursal = SucursalInlineSerializer(write_only=True)
+    password2 = serializers.CharField(write_only=True, required=False)
+    rol = serializers.ChoiceField(
+        choices=[("admin", "Administrador"), ("limMerchant", "Limmerchant")],
+        default="limMerchant"
+    )
 
     class Meta:
         model = User
-        fields = ["username", "email", "password", "password2", "sucursal"]
-        extra_kwargs = {"email": {"required": True}}
-
-    def validate(self, attrs):
-        if attrs["password"] != attrs["password2"]:
-            raise serializers.ValidationError({"password": "Las contraseñas no coinciden."})
-        return attrs
+        fields = ["username", "email", "password", "password2", "rol", "sucursal"]
 
     def create(self, validated_data):
         # 1) separar sucursal
         sucursal_data = validated_data.pop("sucursal")
-        password2 = validated_data.pop("password2")
+        validated_data.pop("password2", None)  # por si no lo envían
 
         nombre = sucursal_data.get("nombre")
         direccion = sucursal_data.get("direccion", "")
 
         # 2) crear / obtener sucursal
-        # Solo usamos "name"; si Branch tiene address lo guardamos, si no lo ignoramos
         branch, created = Branch.objects.get_or_create(name=nombre)
-        # intentar setear address si existe en el modelo
+        
         if direccion and hasattr(branch, "address"):
             branch.address = direccion
             branch.save()
+
+        # ✅ LOG ANTES DEL PASO 3 (como pediste)
+        if not branch or not getattr(branch, "id", None):
+            logger.error(f"[ERROR] No se pudo crear/obtener la sucursal: nombre={nombre}, direccion={direccion}")
+            raise serializers.ValidationError({"sucursal": "No se pudo crear/obtener la sucursal."})
+        else:
+            logger.info(
+                f"Sucursal {'creada' if created else 'recuperada'} correctamente | "
+                f"id={branch.id}, nombre='{branch.name}', direccion='{getattr(branch, 'address', None)}'"
+            )
+
+       
+        #raise Exception(f"id={branch.id}, nombre='{branch.name}', direccion='{getattr(branch, 'address', None)}'")
 
         # 3) crear usuario con rol admin y sucursal asignada
         user = User.objects.create_user(
@@ -49,8 +62,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.sucursal = branch
         user.set_password(validated_data["password"])
         user.save()
-        return user
 
+        logger.info(f"Usuario creado correctamente: username={user.username}, rol={user.rol}, sucursal={branch.name}")
+        return user
 
 class AdminCreateUserSerializer(serializers.ModelSerializer):
     """
@@ -86,5 +100,5 @@ class AdminCreateUserSerializer(serializers.ModelSerializer):
             **validated_data,              # username, email, password
             sucursal=branch,
             rol=getattr(User, "ADMIN", "admin")
-        )
+        )       
         return user
