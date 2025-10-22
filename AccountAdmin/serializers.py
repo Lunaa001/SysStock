@@ -1,104 +1,141 @@
-import logging
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from SysstockApp.models import Branch
 
-logger = logging.getLogger(__name__)
 User = get_user_model()
+
+
+# —— Campo anidado para el registro (solo escritura) ——
 class SucursalInlineSerializer(serializers.Serializer):
     nombre = serializers.CharField(required=True)
-    direccion = serializers.CharField(required=False, allow_blank=True)
+    direccion = serializers.CharField(required=False, allow_blank=True, default="")
 
+
+# —— REGISTRO: crea admin + sucursal inicial (owner = user) ——
 class RegisterSerializer(serializers.ModelSerializer):
-    """
-    Serializer para que un ADMIN cree empleados (o más admins) dentro de su empresa.
-    Si no envían sucursal explícita, se asigna la del admin por defecto.
-    """
     password = serializers.CharField(write_only=True, required=True)
-    sucursal = SucursalInlineSerializer(write_only=True)
-    password2 = serializers.CharField(write_only=True, required=False)
-    rol = serializers.ChoiceField(
-        choices=[("admin", "Administrador"), ("limMerchant", "Limmerchant")],
-        default="limMerchant"
-    )
+    # <- ¡Importante! anidado y SOLO escritura
+    sucursal = SucursalInlineSerializer(write_only=True, required=True)
 
     class Meta:
         model = User
-        fields = ["username", "email", "password", "password2", "rol", "sucursal"]
+        fields = ["username", "email", "password", "sucursal"]
+        extra_kwargs = {
+            "email": {"required": True},
+        }
 
     def create(self, validated_data):
-        # 1) separar sucursal
-        sucursal_data = validated_data.pop("sucursal")
-        validated_data.pop("password2", None)  # por si no lo envían
+        # 1) Sacar los datos anidados antes de crear el user
+        sucursal_data = validated_data.pop("sucursal", None)
+        if not sucursal_data:
+            raise serializers.ValidationError({"sucursal": "Este campo es obligatorio."})
 
-        nombre = sucursal_data.get("nombre")
-        direccion = sucursal_data.get("direccion", "")
-
-        # 2) crear / obtener sucursal
-        branch, created = Branch.objects.get_or_create(name=nombre)
-        
-        if direccion and hasattr(branch, "address"):
-            branch.address = direccion
-            branch.save()
-
-        # ✅ LOG ANTES DEL PASO 3 (como pediste)
-        if not branch or not getattr(branch, "id", None):
-            logger.error(f"[ERROR] No se pudo crear/obtener la sucursal: nombre={nombre}, direccion={direccion}")
-            raise serializers.ValidationError({"sucursal": "No se pudo crear/obtener la sucursal."})
-        else:
-            logger.info(
-                f"Sucursal {'creada' if created else 'recuperada'} correctamente | "
-                f"id={branch.id}, nombre='{branch.name}', direccion='{getattr(branch, 'address', None)}'"
-            )
-
-       
-        #raise Exception(f"id={branch.id}, nombre='{branch.name}', direccion='{getattr(branch, 'address', None)}'")
-
-        # 3) crear usuario con rol admin y sucursal asignada
+        # 2) Crear usuario como ADMIN (dueño)
+        #    create_user ya hace el set_password interno
         user = User.objects.create_user(
+            rol="admin",
             **validated_data,
         )
-        user.rol = getattr(User, "ADMIN", "admin")  # por defecto admin
-        user.sucursal = branch
-        user.set_password(validated_data["password"])
-        user.save()
 
-        logger.info(f"Usuario creado correctamente: username={user.username}, rol={user.rol}, sucursal={branch.name}")
+        # 3) Crear sucursal del usuario (aislada por owner)
+        branch = Branch.objects.create(
+            name=sucursal_data["nombre"],
+            address=sucursal_data.get("direccion", ""),
+            owner=user,
+        )
+
+        # 4) Asociar sucursal al usuario (si tu modelo la tiene)
+        user.sucursal = branch
+        user.save(update_fields=["sucursal"])
+
         return user
 
+
+# —— ADMIN crea empleados (limMerchant) dentro de su empresa/sucursal ——
 class AdminCreateUserSerializer(serializers.ModelSerializer):
-    """
-    Serializer para que un ADMIN cree empleados (o más admins) dentro de su empresa.
-    Si no envían sucursal explícita, se asigna la del admin por defecto.
-    """
     password = serializers.CharField(write_only=True, required=True)
-    sucursal_id = serializers.IntegerField(required=False)  # opcional: asignar sucursal por id
-    rol = serializers.ChoiceField(
-        choices=[("admin", "Administrador"), ("limMerchant", "Limmerchant")],
-        default="limMerchant"
-    )
+    sucursal_id = serializers.IntegerField(required=True)
 
     class Meta:
         model = User
         fields = ["username", "email", "password", "rol", "sucursal_id"]
+        extra_kwargs = {
+            "email": {"required": True},
+        }
 
-    # AccountAdmin/serializers.py (solo el método create)
     def create(self, validated_data):
-        sucursal_data = validated_data.pop("sucursal")
-        validated_data.pop("password2")
+        request = self.context["request"]          # admin autenticado
+        admin_user = request.user
 
-        nombre = sucursal_data.get("nombre")
-        direccion = sucursal_data.get("direccion", "")
+        # validar sucursal del admin
+        try:
+            branch = Branch.objects.get(
+                id=validated_data["sucursal_id"],
+                owner=admin_user
+            )
+        except Branch.DoesNotExist:
+            raise serializers.ValidationError(
+                {"sucursal_id": "La sucursal no te pertenece o no existe."}
+            )
 
-        branch, created = Branch.objects.get_or_create(name=nombre)
-        if direccion and hasattr(branch, "address"):
-            branch.address = direccion
-            branch.save()
+        # rol por defecto si no viene: limMerchant
+        rol = validated_data.get("rol") or "limMerchant"
 
-        # PASA sucursal y rol DENTRO de create_user (primer INSERT ya con valores)
+        # crear empleado (usuario normal ligado a sucursal)
         user = User.objects.create_user(
-            **validated_data,              # username, email, password
+            username=validated_data["username"],
+            email=validated_data["email"],
+            password=validated_data["password"],
+            rol=rol,
             sucursal=branch,
-            rol=getattr(User, "ADMIN", "admin")
-        )       
+        )
         return user
+
+User = get_user_model()
+
+class ReassignBranchSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    new_sucursal_id = serializers.IntegerField()
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        admin_user = request.user
+
+        # Solo admin
+        if getattr(admin_user, "rol", None) != "admin":
+            raise serializers.ValidationError({"detail": "Solo el admin puede reasignar usuarios."})
+
+        # Validar usuario destino
+        try:
+            target_user = User.objects.get(id=attrs["user_id"])
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"user_id": "Usuario no encontrado."})
+
+        if target_user.rol != "limMerchant":
+            raise serializers.ValidationError({"user_id": "Solo se pueden reasignar limMerchant."})
+
+        # Validar nueva sucursal (debe pertenecer al admin)
+        try:
+            new_branch = Branch.objects.get(id=attrs["new_sucursal_id"], owner=admin_user)
+        except Branch.DoesNotExist:
+            raise serializers.ValidationError({"new_sucursal_id": "La sucursal no existe o no te pertenece."})
+
+        attrs["target_user"] = target_user
+        attrs["new_branch"] = new_branch
+        return attrs
+
+    def save(self, **kwargs):
+        target_user = self.validated_data["target_user"]
+        new_branch = self.validated_data["new_branch"]
+        target_user.sucursal = new_branch
+        target_user.save(update_fields=["sucursal"])
+        return target_user
+
+User = get_user_model()
+
+class WorkerSerializer(serializers.ModelSerializer):
+    sucursal_name = serializers.CharField(source="sucursal.name", read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "rol", "sucursal_id", "sucursal_name"]

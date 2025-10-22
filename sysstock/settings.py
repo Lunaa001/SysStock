@@ -22,6 +22,9 @@ INSTALLED_APPS = [
 
     "SysstockApp",
     "AccountAdmin",
+
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [
@@ -102,3 +105,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Inventario y ventas con JWT",
     "VERSION": "1.0.0",
 }
+
+AUTHENTICATION_BACKENDS = [
+    'AccountAdmin.backends.EmailOrUsernameModelBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]

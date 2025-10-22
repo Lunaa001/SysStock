@@ -6,11 +6,24 @@ class Category(models.Model):
     def __str__(self): return self.nombre
 
 class Branch(models.Model):
-    name = models.CharField(max_length=200, unique=True)
-    address = models.CharField(max_length=300, null=True, blank=True)  # <— NUEVO
+    name = models.CharField(max_length=200)
+    address = models.CharField(max_length=300, null=True, blank=True)
+    
+    # DUEÑO de la sucursal (ADMIN de esa empresa)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sucursales",
+        null=True,      # temporalmente null para no romper migraciones
+        blank=True
+    )
+
+    class Meta:
+        ordering = ["id"]
+        unique_together = ("owner", "name")  # un nombre por empresa
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.owner})"
 
 class Product(models.Model):
     nombre = models.CharField(max_length=255)
