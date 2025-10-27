@@ -1,16 +1,26 @@
-from django.urls import path
-from .views import RegisterView, AdminUserCreateView, AdminUserReassignBranchView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenBlacklistView
+
 from .views import (
-    RegisterView, AdminUserCreateView, AdminUserReassignBranchView,
-    AdminWorkersListView, AdminUserDeleteView
+    RegisterView,
+    AdminUserCreateView,
+    AdminUserViewSet,
 )
 
+router = DefaultRouter()
+router.register(r'admin/users', AdminUserViewSet, basename='admin-users')
+
 urlpatterns = [
-    path("auth/register/", RegisterView.as_view(), name="register"),
+    # Register público
+    path("auth/register/", RegisterView.as_view(), name="auth-register"),
+
+    # Crear empleado (limMerchant)
     path("admin/users/create/", AdminUserCreateView.as_view(), name="admin_user_create"),
-    path("admin/users/reassign-branch/", AdminUserReassignBranchView.as_view(), name="admin_user_reassign_branch"),
-    path("admin/users/", AdminWorkersListView.as_view(), name="admin_user_list"),
-    path("admin/users/<int:user_id>/", AdminUserDeleteView.as_view(), name="admin_user_delete"),
+
+    # Logout con Blacklist (se mantiene)
     path("auth/logout/", TokenBlacklistView.as_view(), name="token_blacklist"),
+
+    # Lista / Detalle / Delete / Change-branch
+    path("", include(router.urls)),
 ]

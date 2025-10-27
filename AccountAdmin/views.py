@@ -1,122 +1,128 @@
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import ReassignBranchSerializer
-
-from .serializers import WorkerSerializer 
-
-from .serializers import RegisterSerializer, AdminCreateUserSerializer
 from django.contrib.auth import get_user_model
+from django.db.models import Q
+from rest_framework import viewsets, status, mixins
+from rest_framework.response import Response
+from rest_framework.decorators import action
+from rest_framework.generics import CreateAPIView
+from rest_framework.permissions import IsAuthenticated, AllowAny
+
+from .permissions import IsAdminRole
+from .serializers import (
+    RegisterSerializer,
+    AdminUserReadSerializer,
+    AdminCreateUserSerializer,
+    ChangeUserBranchSerializer,
+)
 
 User = get_user_model()
 
 
-class RegisterView(GenericAPIView):
-    permission_classes = [AllowAny]
+# --------- REGISTER PÚBLICO ----------
+class RegisterView(CreateAPIView):
+    """
+    POST /api/auth/register/
+    Body:
+    {
+      "username": "",
+      "email": "",
+      "password": "",
+      "password2": "",
+      "company": { "name": "", "phone": "", "address": "" }
+    }
+    """
     serializer_class = RegisterSerializer
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "rol": user.rol,
-            "sucursal_id": user.sucursal_id,
-            "access": str(refresh.access_token),
-            "refresh": str(refresh)
-        }, status=status.HTTP_201_CREATED)
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
 
-class AdminUserCreateView(GenericAPIView):
-    permission_classes = [IsAuthenticated]
+# --------- CREAR EMPLEADO (limMerchant) POR ADMIN ----------
+class AdminUserCreateView(CreateAPIView):
+    """
+    POST /api/admin/users/create/
+    """
     serializer_class = AdminCreateUserSerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
 
-    def post(self, request, *args, **kwargs):
-        if request.user.rol != "admin":
-            return Response({"detail": "Solo el admin puede crear empleados."}, status=403)
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["request"] = self.request
+        return ctx
 
-        serializer = self.get_serializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-
-        return Response({
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "rol": user.rol,
-            "sucursal_id": user.sucursal_id,
-        }, status=status.HTTP_201_CREATED)
-
-class AdminUserReassignBranchView(GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = ReassignBranchSerializer
-
-    def post(self, request, *args, **kwargs):
-        # Solo admin
-        if getattr(request.user, "rol", None) != "admin":
-            return Response({"detail": "Solo el admin puede reasignar usuarios."}, status=403)
-
+    # ✅ Responde con el serializer de lectura (rol, sucursal, etc.)
+    def create(self, request, *args, **kwargs):
         ser = self.get_serializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
-        u = ser.save()
-        return Response({
-            "id": u.id,
-            "username": u.username,
-            "rol": u.rol,
-            "sucursal_id": u.sucursal_id
-        }, status=status.HTTP_200_OK)
+        user = ser.save()
+        read = AdminUserReadSerializer(user)
+        return Response(read.data, status=status.HTTP_201_CREATED)
 
-User = get_user_model()
 
-class AdminWorkersListView(GenericAPIView):
+# --------- LISTAR / DETALLE / BORRAR / TRANSFERIR ----------
+class AdminUserViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet
+):
     """
-    GET /api/admin/users/?sucursal_id=<id>
-    - Lista todos los empleados (rol=limMerchant) del admin autenticado.
-    - Si pasás sucursal_id, filtra solo esa sucursal.
+    - GET    /api/admin/users/            -> listar (solo tus usuarios, sin mostrarte a vos)
+    - GET    /api/admin/users/{id}/       -> detalle
+    - DELETE /api/admin/users/{id}/       -> borrar
+    - PATCH  /api/admin/users/{id}/change-branch/ -> cambiar sucursal
     """
-    permission_classes = [IsAuthenticated]
-    serializer_class = WorkerSerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
 
-    def get(self, request, *args, **kwargs):
-        if getattr(request.user, "rol", None) != "admin":
-            return Response({"detail": "Solo admin."}, status=403)
+    def get_queryset(self):
+        user = self.request.user
+        UserModel = get_user_model()
 
-        qs = User.objects.filter(rol="limMerchant", sucursal__owner=request.user)
+        if getattr(user, "is_superuser", False):
+            return UserModel.objects.all().order_by("id")
 
-        sucursal_id = request.query_params.get("sucursal_id")
-        if sucursal_id:
-            qs = qs.filter(sucursal_id=sucursal_id)
+        # Solo yo y empleados de mis sucursales
+        return UserModel.objects.filter(
+            Q(id=user.id) | Q(sucursal__owner=user)
+        ).order_by("id")
 
-        ser = self.get_serializer(qs.order_by("id"), many=True)
-        return Response(ser.data, status=200)
+    def get_serializer_class(self):
+        return AdminUserReadSerializer
 
+    # ✅ Opción A — no mostrar al admin logueado en el listado
+    def list(self, request, *args, **kwargs):
+        qs = self.get_queryset()
+        if not request.user.is_superuser:
+            qs = qs.exclude(id=request.user.id)  # ocultar admin actual
+        ser = self.get_serializer(qs, many=True)
+        return Response(ser.data)
 
-class AdminUserDeleteView(GenericAPIView):
-    """
-    DELETE /api/admin/users/<user_id>/
-    - Borra un empleado (rol=limMerchant) que pertenezca a alguna sucursal del admin.
-    """
-    permission_classes = [IsAuthenticated]
+    @action(detail=True, methods=["patch"], url_path="change-branch")
+    def change_branch(self, request, pk=None):
+        user_to_move = self.get_object()
 
-    def delete(self, request, user_id, *args, **kwargs):
-        if getattr(request.user, "rol", None) != "admin":
-            return Response({"detail": "Solo admin."}, status=403)
+        # 🚫 no mover admins (salvo superuser)
+        if getattr(user_to_move, "rol", None) == "admin" and not getattr(request.user, "is_superuser", False):
+            return Response({"detail": "No puedes transferir la sucursal de un admin."},
+                            status=status.HTTP_403_FORBIDDEN)
 
-        try:
-            u = User.objects.get(
-                id=user_id,
-                rol="limMerchant",
-                sucursal__owner=request.user
-            )
-        except User.DoesNotExist:
-            return Response({"detail": "Usuario no encontrado o no te pertenece."}, status=404)
+        ser = ChangeUserBranchSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        target_branch = ser.validated_data["_branch_obj"]
 
-        u.delete()
-        return Response(status=204)
+        # 🚫 no adopciones entre empresas (empleado ya asignado a sucursal de otro admin)
+        if not getattr(request.user, "is_superuser", False):
+            current_branch = getattr(user_to_move, "sucursal", None)
+            if current_branch and getattr(current_branch, "owner_id", None) != request.user.id:
+                return Response({"detail": "No puedes trasladar empleados que pertenecen a otra empresa."},
+                                status=status.HTTP_403_FORBIDDEN)
+
+        if not hasattr(user_to_move, "sucursal"):
+            return Response({"detail": "El modelo User no tiene FK 'sucursal'."}, status=400)
+
+        user_to_move.sucursal = target_branch
+        user_to_move.save(update_fields=["sucursal"])
+        return Response(AdminUserReadSerializer(user_to_move).data, status=200)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({"message": "Usuario eliminado con éxito"}, status=status.HTTP_200_OK)

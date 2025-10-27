@@ -1,10 +1,8 @@
-# SysstockApp/views.py
-
 # =========================
 # IMPORTS
 # =========================
-from rest_framework import viewsets, permissions, filters, status  # MOD (quitamos serializers aquí; no se usa)
-from rest_framework.exceptions import PermissionDenied  # NUEVO (para perform_create en BranchViewSet)
+from rest_framework import viewsets, permissions, filters, status
+from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -12,16 +10,12 @@ from rest_framework.response import Response
 from django.db import transaction
 from django.utils import timezone
 from django.utils.timezone import localdate
-from datetime import datetime, time   # MOD (agregamos time para rangos de día)
+from datetime import datetime, time
 
 from openpyxl import Workbook
 from django.http import HttpResponse
 
 from django.db.models import Sum
-
-# (Dejamos importadas funciones/fields adicionales si luego las querés usar en reportes avanzados)
-# from django.db.models import F, DecimalField, ExpressionWrapper
-# from django.db.models.functions import TruncDate
 
 from .models import Category, Branch, Product, StockMovement, Sale
 from .serializers import (
@@ -31,7 +25,7 @@ from .serializers import (
     StockMovementSerializer,
     SaleSerializer,
 )
-from AccountAdmin.permissions import IsAdmin
+from AccountAdmin.permissions import IsAdmin  # alias válido a IsAdminRole
 
 
 # =========================
@@ -66,15 +60,15 @@ def _scope_by_branch_on_model(qs, user, branch_field="sucursal"):
 
 
 # =========================
-# HELPER DE STOCK (por movimientos)  # NUEVO
+# HELPER DE STOCK (por movimientos)
 # =========================
 def _stock_actual_producto(producto: Product) -> int:
     """
     Calcula stock actual por producto como:
-    stock = ENTRADAS ('in') - SALIDAS ('out')
+    stock = ENTRADAS ('IN') - SALIDAS ('OUT')
     """
-    entradas = StockMovement.objects.filter(producto=producto, tipo="in").aggregate(total=Sum("cantidad"))["total"] or 0
-    salidas  = StockMovement.objects.filter(producto=producto, tipo="out").aggregate(total=Sum("cantidad"))["total"] or 0
+    entradas = StockMovement.objects.filter(producto=producto, tipo="IN").aggregate(total=Sum("cantidad"))["total"] or 0
+    salidas  = StockMovement.objects.filter(producto=producto, tipo="OUT").aggregate(total=Sum("cantidad"))["total"] or 0
     return int(entradas - salidas)
 
 
@@ -84,6 +78,7 @@ def _stock_actual_producto(producto: Product) -> int:
 class BranchViewSet(viewsets.ModelViewSet):
     serializer_class = BranchSerializer
     permission_classes = [permissions.IsAuthenticated]
+    queryset = Branch.objects.all().order_by("id")
 
     def get_queryset(self):
         qs = Branch.objects.all().order_by("id")
@@ -94,9 +89,24 @@ class BranchViewSet(viewsets.ModelViewSet):
         Guarda owner=admin que crea la sucursal (si no, luego no aparece en /api/sucursales/ del admin).
         """
         user = self.request.user
-        if getattr(user, "rol", None) != "admin":
+        if getattr(user, "rol", None) != "admin" and not getattr(user, "is_superuser", False):
             raise PermissionDenied("Solo un admin puede crear sucursales.")
-        serializer.save(owner=user)  # MOD (clave)
+        serializer.save(owner=user)
+
+    # ✅ EDITAR SUCURSAL (PUT/PATCH): nombre, dirección y teléfono
+    def update(self, request, *args, **kwargs):
+        branch = self.get_object()
+        user = request.user
+        if branch.owner != user and not getattr(user, "is_superuser", False):
+            return Response({"detail": "No puedes editar una sucursal de otro admin."}, status=403)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        branch = self.get_object()
+        user = request.user
+        if branch.owner != user and not getattr(user, "is_superuser", False):
+            return Response({"detail": "No puedes editar una sucursal de otro admin."}, status=403)
+        return super().partial_update(request, *args, **kwargs)
 
     # -------------------------
     # /api/sucursales/<id>/ventas_rango/?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
@@ -131,7 +141,7 @@ class BranchViewSet(viewsets.ModelViewSet):
         if hasta_date < desde_date:
             return Response({"detail": "`hasta` no puede ser anterior a `desde`."}, status=400)
 
-        # Rango completo por día [00:00:00, 23:59:59]  # MOD
+        # Rango completo por día [00:00:00, 23:59:59]
         desde_dt = datetime.combine(desde_date, time.min)
         hasta_dt = datetime.combine(hasta_date, time.max)
 
@@ -200,11 +210,10 @@ class BranchViewSet(viewsets.ModelViewSet):
                 if pid is None:
                     continue
                 if pid not in agg:
-                    agg[pid] = {"producto_id": pid, "producto": pname, "cantidad": 0, "monto": 0.0}
+                    agg[pid] = {"producto_id": pid, "producto": pname, "cantidad": 0}
                 agg[pid]["cantidad"] += it.cantidad
-                agg[pid]["monto"] += float(it.cantidad * it.precio_unit)
 
-        result = sorted(agg.values(), key=lambda x: x["monto"], reverse=True)
+        result = sorted(agg.values(), key=lambda x: x["cantidad"], reverse=True)
         return Response({
             "sucursal": branch.name,
             "desde": desde,
@@ -309,8 +318,8 @@ class BranchViewSet(viewsets.ModelViewSet):
     def resumen(self, request, pk=None):
         """
         Resumen reducido (usa stock REAL por movimientos, no Product.cantidad).
-        - ventas_hoy.monto
-        - productos_bajo_stock (stock real calculado)
+        - ventas_hoy.monto (con filtro por rango horario local -> evita problemas de timezone)
+        - productos_bajo_stock (stock real calculado; usa stock_min si existe)
         """
         branch = self.get_object()
         u = request.user
@@ -321,12 +330,20 @@ class BranchViewSet(viewsets.ModelViewSet):
         if getattr(u, "rol", None) == "admin" and branch.owner_id != u.id:
             return Response({"detail": "Esta sucursal no te pertenece."}, status=403)
 
+        # Hoy local -> rango horario aware [00:00:00, 23:59:59]
         hoy = localdate()
+        inicio = timezone.make_aware(datetime.combine(hoy, time.min))
+        fin    = timezone.make_aware(datetime.combine(hoy, time.max))
 
         # Ventas HOY (monto)
-        ventas_hoy_qs = Sale.objects.filter(sucursal=branch, creado_en__date=hoy).prefetch_related("items")
+        ventas_hoy_qs = (
+            Sale.objects
+            .filter(sucursal=branch, creado_en__range=(inicio, fin))
+            .prefetch_related("items")
+        )
         ventas_hoy_monto = float(sum(
-            sum(it.cantidad * it.precio_unit for it in v.items.all()) for v in ventas_hoy_qs
+            sum(float(it.cantidad) * float(it.precio_unit) for it in v.items.all())
+            for v in ventas_hoy_qs
         ))
 
         # Threshold de bajo stock
@@ -335,11 +352,16 @@ class BranchViewSet(viewsets.ModelViewSet):
         except ValueError:
             threshold = 5
 
-        # Stock bajo (por movimientos)  # MOD
+        # Stock bajo (por movimientos)
         productos_bajo_stock = []
         for p in Product.objects.filter(sucursal=branch).select_related("categoria"):
-            stock_actual = _stock_actual_producto(p)
-            if stock_actual <= threshold:
+            # stock actual por movimientos
+            entradas = StockMovement.objects.filter(producto=p, tipo="IN").aggregate(s=Sum("cantidad"))["s"] or 0
+            salidas  = StockMovement.objects.filter(producto=p, tipo="OUT").aggregate(s=Sum("cantidad"))["s"] or 0
+            stock_actual = int(entradas - salidas)
+
+            limite = p.stock_min if p.stock_min is not None else threshold
+            if stock_actual <= limite:
                 productos_bajo_stock.append({
                     "id": p.id,
                     "nombre": p.nombre,
@@ -356,7 +378,7 @@ class BranchViewSet(viewsets.ModelViewSet):
         })
 
     # -------------------------
-    # DELETE /api/sucursales/<id>/  (borra TODO + limMerchants de esa sucursal)
+    # DELETE /api/sucursales/<id>/
     # -------------------------
     def destroy(self, request, *args, **kwargs):
         branch = self.get_object()
@@ -374,7 +396,7 @@ class BranchViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             # Borrar empleados limMerchant de esta sucursal
             User.objects.filter(rol="limMerchant", sucursal_id=branch.id).delete()
-            # Borrar sucursal (lo demás cae por CASCADE si los FKs están bien)
+            # Borrar sucursal
             branch.delete()
 
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -393,9 +415,26 @@ class CategoryViewSet(viewsets.ModelViewSet):
     ordering = ["id"]
 
     def get_queryset(self):
-        # Si Category no está atada a sucursal, se puede dejar global
-        # Si querés ligarla a sucursal/empresa, relacioná Category con Branch y usa _scope_by_branch_on_model
-        return Category.objects.all().order_by("id")
+        """
+        - superuser: ve todo
+        - admin: ve categorías donde owner = él
+        - limMerchant: ve categorías de su admin (owner de su sucursal)
+        """
+        user = self.request.user
+        qs = Category.objects.all()
+
+        if getattr(user, "is_superuser", False):
+            return qs.order_by("id")
+
+        if getattr(user, "rol", None) == "admin":
+            return qs.filter(owner=user).order_by("id")
+
+        if getattr(user, "rol", None) == "limMerchant":
+            if getattr(user, "sucursal_id", None) and getattr(user, "sucursal", None):
+                return qs.filter(owner=user.sucursal.owner).order_by("id")
+            return Category.objects.none()
+
+        return Category.objects.none()
 
 
 # =========================
@@ -406,8 +445,8 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["id", "categoria", "nombre", "sucursal"]
-    search_fields = ["nombre"]
+    filterset_fields = ["id", "categoria", "nombre", "sucursal", "sku"]
+    search_fields = ["nombre", "sku"]
     ordering_fields = ["id", "nombre", "precio"]
     ordering = ["id"]
 
@@ -425,7 +464,7 @@ class StockMovementViewSet(viewsets.ModelViewSet):
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["id", "tipo", "sucursal", "producto"]
-    search_fields = ["producto__nombre"]
+    search_fields = ["producto__nombre", "motivo"]
     ordering_fields = ["id", "creado_en"]
     ordering = ["-creado_en"]
 
@@ -436,7 +475,18 @@ class StockMovementViewSet(viewsets.ModelViewSet):
             .all()
             .order_by("-creado_en")
         )
-        return _scope_by_branch_on_model(qs, self.request.user, branch_field="sucursal")
+        qs = _scope_by_branch_on_model(qs, self.request.user, branch_field="sucursal")
+
+        # Filtros opcionales por fecha (YYYY-MM-DD)
+        desde = self.request.query_params.get("desde")
+        hasta = self.request.query_params.get("hasta")
+        if desde and hasta:
+            try:
+                qs = qs.filter(creado_en__date__range=(desde, hasta))
+            except Exception:
+                pass
+
+        return qs
 
 
 # =========================
@@ -463,13 +513,14 @@ class SaleViewSet(viewsets.ModelViewSet):
 
 
 # =========================
-# BAJO STOCK (endpoint suelto)  # MOD (usa movimientos en vez de Product.cantidad)
+# BAJO STOCK (endpoint suelto)
 # =========================
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def low_stock(request):
     """
     Lista productos con stock <= threshold (por movimientos).
+    Usa stock_min del producto si está definido; si no, usa 'threshold'.
     Query params:
       - threshold: int (default 5)
       - limit:     int (default 50)
@@ -490,7 +541,8 @@ def low_stock(request):
     rows = []
     for p in qs:
         stock_actual = _stock_actual_producto(p)
-        if stock_actual <= threshold:
+        limite = p.stock_min if p.stock_min is not None else threshold
+        if stock_actual <= limite:
             rows.append({
                 "id": p.id,
                 "producto": p.nombre,
@@ -541,3 +593,131 @@ def export_sales_excel(request):
     response["Content-Disposition"] = 'attachment; filename="ventas.xlsx"'
     wb.save(response)
     return response
+
+
+# =========================
+# VENTAS HOY (empresa) - JSON
+# =========================
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def ventas_hoy_empresa(request):
+    """
+    GET /api/ventas/hoy/empresa
+    Suma $ de HOY:
+      - admin: todas sus sucursales
+      - limMerchant: solo su sucursal
+      - superuser: todo
+    """
+    # Día local de hoy
+    hoy = timezone.localdate()
+
+    # Ventana del día en TZ local [00:00:00, 23:59:59]
+    tz = timezone.get_current_timezone()
+    start = timezone.make_aware(datetime.combine(hoy, time.min), tz)
+    end   = timezone.make_aware(datetime.combine(hoy, time.max), tz)
+
+    qs = (Sale.objects
+          .filter(creado_en__range=(start, end))
+          .prefetch_related("items")
+          .select_related("sucursal"))
+
+    # Respeta scoping por sucursal/owner
+    qs = _scope_by_branch_on_model(qs, request.user, branch_field="sucursal")
+
+    total = 0.0
+    for v in qs:
+        total += float(sum(it.cantidad * it.precio_unit for it in v.items.all()))
+
+    return Response({"fecha": str(hoy), "monto_total_hoy": total})
+
+
+# =========================
+# KARDEX por producto (JSON + XLSX)
+# =========================
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def kardex_producto(request, producto_id):
+    """
+    GET /api/productos/<producto_id>/kardex?sucursal=<id>&desde=&hasta=
+    Devuelve todos los movimientos de ese producto en esa sucursal,
+    ordenados cronológicamente, con saldo acumulado.
+    """
+    # 1) Validar que venga 'sucursal'
+    sucursal_id = request.query_params.get("sucursal")
+    if not sucursal_id:
+        return Response({"detail": "Parámetro 'sucursal' requerido."}, status=400)
+
+    # 2) Convertir a int (si falla → error)
+    try:
+        sucursal_id = int(sucursal_id)
+    except ValueError:
+        return Response({"detail": "Parámetro 'sucursal' inválido."}, status=400)
+
+    # 3) Base QuerySet con producto y sucursal
+    qs = (
+        StockMovement.objects
+        .filter(producto_id=producto_id, sucursal_id=sucursal_id)
+        .select_related("producto", "sucursal")
+    )
+
+    # 4) Filtros de fecha (opcionales)
+    desde = request.query_params.get("desde")  # formato 'YYYY-MM-DD'
+    hasta = request.query_params.get("hasta")
+    if desde and hasta:
+        qs = qs.filter(creado_en__date__range=(desde, hasta))
+
+    # 5) Scoping por rol / empresa
+    qs = _scope_by_branch_on_model(qs, request.user, branch_field="sucursal")
+
+    # 6) Orden cronológico
+    qs = qs.order_by("creado_en")
+
+    # 7) Construir respuesta con saldo acumulado
+    saldo = 0
+    items = []
+    for m in qs:
+        delta = m.cantidad if m.tipo == "IN" else -m.cantidad
+        saldo += delta
+        items.append({
+            "id": m.id,
+            "fecha": m.creado_en,   # si querés, después te lo paso en zona horaria local
+            "tipo": m.tipo,         # IN / OUT
+            "cantidad": m.cantidad,
+            "motivo": m.motivo,
+            "saldo": saldo,         # saldo luego de este movimiento
+        })
+
+    # 8) Respuesta final
+    return Response({
+        "producto_id": int(producto_id),
+        "sucursal_id": sucursal_id,
+        "items": items
+    })
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def kardex_producto_xlsx(request, producto_id):
+    sucursal_id = request.query_params.get("sucursal")
+    if not sucursal_id:
+        return Response({"detail": "Parámetro 'sucursal' requerido."}, status=400)
+    qs = (StockMovement.objects.filter(producto_id=producto_id, sucursal_id=sucursal_id)
+          .select_related("producto", "sucursal").order_by("creado_en"))
+    d = request.query_params.get("desde"); h = request.query_params.get("hasta")
+    if d and h: qs = qs.filter(creado_en__date__range=(d, h))
+    qs = _scope_by_branch_on_model(qs, request.user, branch_field="sucursal")
+
+    wb = Workbook(); ws = wb.active
+    ws.title = "Kardex"
+    ws.append(["Fecha","Tipo","Cantidad","Motivo","Saldo"])
+    saldo = 0
+    for m in qs:
+        delta = m.cantidad if m.tipo == "IN" else -m.cantidad
+        saldo += delta
+        ws.append([
+            timezone.localtime(m.creado_en).strftime("%Y-%m-%d %H:%M"),
+            m.tipo, int(m.cantidad), m.motivo or "", int(saldo)
+        ])
+    resp = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resp['Content-Disposition'] = f'attachment; filename="kardex_producto_{producto_id}_suc_{sucursal_id}.xlsx"'
+    wb.save(resp); return resp

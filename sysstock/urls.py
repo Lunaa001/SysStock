@@ -14,8 +14,7 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 
-    # Apps
+    # Apps (asegurá el casing exacto del paquete)
     path("api/", include("SysstockApp.urls")),
-    path("api/", include("AccountAdmin.urls")),   # <- importante
+    path("api/", include("AccountAdmin.urls")),
 ]
-
