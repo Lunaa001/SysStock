@@ -86,6 +86,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='saleitem',
-            constraint=models.CheckConstraint(condition=models.Q(('cantidad__gte', 1)), name='saleitem_cantidad_gte_1'),
+            constraint=models.CheckConstraint(check=models.Q(('cantidad__gte', 1)), name='saleitem_cantidad_gte_1'),
         ),
     ]
