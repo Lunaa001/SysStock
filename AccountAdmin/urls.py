@@ -6,6 +6,7 @@ from .views import (
     RegisterView,
     AdminUserCreateView,
     AdminUserViewSet,
+    MeView,   # 👈 CORRECTO
 )
 
 router = DefaultRouter()
@@ -18,9 +19,12 @@ urlpatterns = [
     # Crear empleado (limMerchant)
     path("admin/users/create/", AdminUserCreateView.as_view(), name="admin_user_create"),
 
-    # Logout con Blacklist (se mantiene)
+    # Logout con Blacklist
     path("auth/logout/", TokenBlacklistView.as_view(), name="token_blacklist"),
 
-    # Lista / Detalle / Delete / Change-branch
+    # Endpoints del router (listar / detalle / delete / change-branch)
     path("", include(router.urls)),
+
+    # Perfil del usuario logueado (me)
+    path("me/", MeView.as_view(), name="me"),  # 👈 CORRECTO
 ]

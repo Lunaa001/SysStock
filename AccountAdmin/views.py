@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.views import APIView
+
 
 from .permissions import IsAdminRole
 from .serializers import (
@@ -126,3 +128,35 @@ class AdminUserViewSet(
         instance = self.get_object()
         self.perform_destroy(instance)
         return Response({"message": "Usuario eliminado con éxito"}, status=status.HTTP_200_OK)
+
+class MeView(APIView):
+    """
+    GET /api/me/
+
+    Devuelve info básica del usuario logueado:
+    - id, username, email
+    - rol (admin / limMerchant)
+    - sucursal {id, name} si tiene
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        data = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "rol": getattr(user, "rol", None),
+            "is_superuser": user.is_superuser,
+            "sucursal": None,
+        }
+
+        branch = getattr(user, "sucursal", None)
+        if branch:
+            data["sucursal"] = {
+                "id": branch.id,
+                "name": getattr(branch, "name", None),
+            }
+
+        return Response(data, status=200)
