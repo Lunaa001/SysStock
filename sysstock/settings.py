@@ -59,18 +59,20 @@ WSGI_APPLICATION = "sysstock.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "sysstock",
-        "USER": "root",
-        "PASSWORD": "1234",
-        "HOST": "localhost",
-        "PORT": "3306",
-        "OPTIONS": {
-            "charset": "utf8mb4",
-        },
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
+    # MySQL configuration (uncomment to use MySQL):
+    # "default": {
+    #     "ENGINE": "django.db.backends.mysql",
+    #     "NAME": "sysstock",
+    #     "USER": "root",
+    #     "PASSWORD": "1234",
+    #     "HOST": "localhost",
+    #     "PORT": "3306",
+    #     "OPTIONS": {"charset": "utf8mb4"},
+    # }
 }
-
 
 AUTH_PASSWORD_VALIDATORS = []
 
