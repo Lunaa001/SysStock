@@ -8,6 +8,7 @@ from django.db.models import F, Q, Sum, DecimalField
 # =========================
 class Category(models.Model):
     nombre = models.CharField(max_length=100, unique=False)
+    descripcion = models.CharField(max_length=255, null=True, blank=True)
 
     # Dueño (el admin / empresa). Null=True para migraciones sin romper.
     owner = models.ForeignKey(
@@ -25,7 +26,6 @@ class Category(models.Model):
 
     def __str__(self):
         return self.nombre
-
 
 # =========================
 #  Sucursales
@@ -93,27 +93,50 @@ class Product(models.Model):
 
 # =========================
 #  Movimientos de stock
-# =========================
+
 class StockMovement(models.Model):
     IN = "IN"
     OUT = "OUT"
-    TYPES = [(IN, "Ingreso"), (OUT, "Egreso")]
+    SALE = "SALE"
 
-    producto = models.ForeignKey(Product, related_name="movimientos", on_delete=models.CASCADE)
-    sucursal = models.ForeignKey(Branch, on_delete=models.PROTECT)
-    tipo = models.CharField(max_length=3, choices=TYPES)
+    TYPES = [
+        (IN, "Ingreso"),
+        (OUT, "Egreso"),
+        (SALE, "Venta"),
+    ]
+
+    producto = models.ForeignKey(
+        "Product",
+        related_name="movimientos",
+        on_delete=models.CASCADE
+    )
+    sucursal = models.ForeignKey("Branch", on_delete=models.PROTECT)
+
+    # 👉 Aumentamos max_length porque ahora podemos guardar "SALE"
+    tipo = models.CharField(max_length=8, choices=TYPES)
+
     cantidad = models.PositiveIntegerField()  # entero positivo
-    # campo firmado para agilizar SUM (IN=+cantidad, OUT=-cantidad)
+    # campo firmado para agilizar SUM (IN=+cantidad, OUT/SALE=-cantidad)
     cantidad_signed = models.IntegerField(editable=False)
 
     # opcional: motivo/memo del movimiento
     motivo = models.CharField(max_length=255, blank=True, null=True)
 
     # opcional: costo unitario (no impacta stock; útil para valorización a futuro)
-    costo_unit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    costo_unit = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
 
     # auditoría
-    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -124,7 +147,13 @@ class StockMovement(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        self.cantidad_signed = int(self.cantidad) if self.tipo == self.IN else -int(self.cantidad)
+        """
+        IN suma stock, OUT y SALE restan stock.
+        """
+        if self.tipo == self.IN:
+            self.cantidad_signed = int(self.cantidad)
+        else:  # OUT o SALE
+            self.cantidad_signed = -int(self.cantidad)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -135,9 +164,18 @@ class StockMovement(models.Model):
 #  Ventas
 # =========================
 class Sale(models.Model):
-    sucursal = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name="ventas")
+    sucursal = models.ForeignKey(
+        "Branch",
+        on_delete=models.PROTECT,
+        related_name="ventas"
+    )
 
-    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
     creado_en = models.DateTimeField(auto_now_add=True)
 
     @property
@@ -148,7 +186,7 @@ class Sale(models.Model):
                 output_field=DecimalField(max_digits=14, decimal_places=2),
             )
         )
-        return agg["s"] or 0
+        return agg["s"] or Decimal("0")
 
     def __str__(self):
         return f"Venta #{self.id} - suc {self.sucursal_id}"
@@ -156,13 +194,16 @@ class Sale(models.Model):
 
 class SaleItem(models.Model):
     venta = models.ForeignKey(Sale, related_name="items", on_delete=models.CASCADE)
-    producto = models.ForeignKey(Product, on_delete=models.PROTECT)
+    producto = models.ForeignKey("Product", on_delete=models.PROTECT)
     cantidad = models.PositiveIntegerField()  # entero positivo
     precio_unit = models.DecimalField(max_digits=12, decimal_places=2)
 
     class Meta:
         constraints = [
-            models.CheckConstraint(check=Q(cantidad__gte=1), name="saleitem_cantidad_gte_1")
+            models.CheckConstraint(
+                check=Q(cantidad__gte=1),
+                name="saleitem_cantidad_gte_1",
+            )
         ]
 
     def __str__(self):

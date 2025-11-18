@@ -1,10 +1,10 @@
 # Core Django
 Django>=4.2,<5.0
 
-# Database (MySQL)
-# mysqlclient>=2.2.0  # Requires: sudo pacman -S mariadb-libs pkg-config
-# Alternative: PyMySQL (pure Python, no C dependencies)
-PyMySQL>=1.1.0
+ Database (MySQL)
+ mysqlclient>=2.2.0  # Requires: sudo pacman -S mariadb-libs pkg-config
+ Alternative: PyMySQL (pure Python, no C dependencies)
+ PyMySQL>=1.1.0
 
 # Django REST Framework
 djangorestframework>=3.14.0
