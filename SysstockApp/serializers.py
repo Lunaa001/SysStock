@@ -273,13 +273,25 @@ class SaleItemSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.CharField(source="producto.nombre", read_only=True)
     cantidad = serializers.IntegerField(min_value=1)  # entero positivo
 
+    # 🔑 ahora es opcional, puede venir vacío y se toma del producto
+    precio_unit = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = SaleItem
         fields = ["id", "producto", "producto_nombre", "cantidad", "precio_unit"]
         read_only_fields = ["id", "producto_nombre"]
+        extra_kwargs = {
+            "precio_unit": {"required": False},
+        }
 
     def validate_precio_unit(self, value):
-        if value is None or value <= 0:
+        # solo validamos si viene; si no, se toma product.precio en create()
+        if value is not None and value <= 0:
             raise serializers.ValidationError("El precio unitario debe ser mayor a 0.")
         return value
 
@@ -351,8 +363,12 @@ class SaleSerializer(serializers.ModelSerializer):
         venta = Sale.objects.create(**validated_data)
 
         for it in items_data:
-            producto = it["producto"] if isinstance(it["producto"], Product) else Product.objects.get(pk=it["producto"])
+            producto = (
+                it["producto"] if isinstance(it["producto"], Product)
+                else Product.objects.get(pk=it["producto"])
+            )
             cantidad = it["cantidad"]
+            # 👉 si no viene precio_unit, usamos producto.precio
             precio_unit = it.get("precio_unit") or producto.precio
 
             # Crear item

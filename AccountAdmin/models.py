@@ -15,7 +15,10 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     rol = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ADMIN)
 
-    # La sucursal es opcional para admins, obligatoria para empleados
+    company_name = models.CharField(max_length=255, blank=True, null=True)
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+
     sucursal = models.ForeignKey(
         Branch,
         on_delete=models.SET_NULL,
