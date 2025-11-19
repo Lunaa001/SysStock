@@ -68,21 +68,33 @@ print(f"DB_HOST: {os.getenv('DB_HOST', 'NOT SET - using default: localhost')}")
 print(f"DB_PORT: {os.getenv('DB_PORT', 'NOT SET - using default: 3306')}")
 print(f"DB_NAME: {os.getenv('DB_NAME', 'NOT SET - using default: sysstock')}")
 print(f"DB_USER: {os.getenv('DB_USER', 'NOT SET - using default: root')}")
+print(f"MYSQL_URL exists: {bool(os.getenv('MYSQL_URL'))}")
+print(f"DATABASE_URL exists: {bool(os.getenv('DATABASE_URL'))}")
 print("=" * 50)
 
-DATABASES = {
-    "default": {
-        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.mysql"),
-        "NAME": os.getenv("DB_NAME", "sysstock"),
-        "USER": os.getenv("DB_USER", "root"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "1234"),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "3306"),
-        "OPTIONS": {
-            "charset": "utf8mb4",
-        },
+# Try to parse DATABASE_URL if available
+import dj_database_url
+if os.getenv('DATABASE_URL') or os.getenv('MYSQL_URL'):
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.getenv('DATABASE_URL') or os.getenv('MYSQL_URL'),
+            conn_max_age=600
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.mysql"),
+            "NAME": os.getenv("DB_NAME", "sysstock"),
+            "USER": os.getenv("DB_USER", "root"),
+            "PASSWORD": os.getenv("DB_PASSWORD", "1234"),
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": os.getenv("DB_PORT", "3306"),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = []
 

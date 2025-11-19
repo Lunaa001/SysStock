@@ -6,6 +6,9 @@ Django>=4.2,<5.0
 # Alternative: PyMySQL (pure Python, no C dependencies)
 PyMySQL>=1.1.0
 
+# Database URL parser for Railway/Heroku
+dj-database-url>=2.0.0
+
 # Django REST Framework
 djangorestframework>=3.14.0
 
