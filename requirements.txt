@@ -5,6 +5,7 @@ Django>=4.2,<5.0
 # mysqlclient>=2.2.0  # Requires: sudo pacman -S mariadb-libs pkg-config
 # Alternative: PyMySQL (pure Python, no C dependencies)
 PyMySQL>=1.1.0
+cryptography>=41.0.0  # Required for PyMySQL with caching_sha2_password
 
 # Database URL parser for Railway/Heroku
 dj-database-url>=2.0.0
