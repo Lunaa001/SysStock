@@ -61,6 +61,15 @@ TEMPLATES = [{
 
 WSGI_APPLICATION = "sysstock.wsgi.application"
 
+# Debug: Print database configuration (remove in production)
+print("=" * 50)
+print("DATABASE CONFIGURATION:")
+print(f"DB_HOST: {os.getenv('DB_HOST', 'NOT SET - using default: localhost')}")
+print(f"DB_PORT: {os.getenv('DB_PORT', 'NOT SET - using default: 3306')}")
+print(f"DB_NAME: {os.getenv('DB_NAME', 'NOT SET - using default: sysstock')}")
+print(f"DB_USER: {os.getenv('DB_USER', 'NOT SET - using default: root')}")
+print("=" * 50)
+
 DATABASES = {
     "default": {
         "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.mysql"),
