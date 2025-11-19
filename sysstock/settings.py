@@ -163,7 +163,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5174",
     "http://localhost:5175",
     "http://127.0.0.1:5173",
-    "https://691d2c5a70982178d925c4f1--lighthearted-longma-d6777b.netlify.app",  # Netlify deployment
+    "https://lighthearted-longma-d6777b.netlify.app",  # Netlify deployment
 ]
 
 CORS_ALLOW_CREDENTIALS = True
