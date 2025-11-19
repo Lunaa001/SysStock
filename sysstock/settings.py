@@ -70,18 +70,35 @@ print(f"DB_NAME: {os.getenv('DB_NAME', 'NOT SET - using default: sysstock')}")
 print(f"DB_USER: {os.getenv('DB_USER', 'NOT SET - using default: root')}")
 print(f"MYSQL_URL exists: {bool(os.getenv('MYSQL_URL'))}")
 print(f"DATABASE_URL exists: {bool(os.getenv('DATABASE_URL'))}")
+database_url = os.getenv('DATABASE_URL') or os.getenv('MYSQL_URL')
+if database_url:
+    print(f"DATABASE_URL value: {database_url[:20]}...{database_url[-20:]}")  # Show first/last parts only
 print("=" * 50)
 
 # Try to parse DATABASE_URL if available
-import dj_database_url
-if os.getenv('DATABASE_URL') or os.getenv('MYSQL_URL'):
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=os.getenv('DATABASE_URL') or os.getenv('MYSQL_URL'),
-            conn_max_age=600
-        )
-    }
-else:
+try:
+    import dj_database_url
+    if database_url:
+        print("Parsing DATABASE_URL with dj_database_url...")
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=database_url,
+                conn_max_age=600,
+                conn_health_checks=True,
+            )
+        }
+        # Ensure PyMySQL is used as the MySQL driver
+        if DATABASES['default']['ENGINE'] == 'django.db.backends.mysql':
+            DATABASES['default']['OPTIONS'] = {
+                'charset': 'utf8mb4',
+            }
+        print(f"Database configured: {DATABASES['default']['ENGINE']}")
+        print(f"Host: {DATABASES['default'].get('HOST', 'N/A')}")
+        print(f"Port: {DATABASES['default'].get('PORT', 'N/A')}")
+    else:
+        raise ValueError("No DATABASE_URL found")
+except (ImportError, ValueError) as e:
+    print(f"Using manual database config: {e}")
     DATABASES = {
         "default": {
             "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.mysql"),
